@@ -24,6 +24,11 @@ def encrypt(body):
   hex_body = ''.join('{:02x}'.format(x) for x in enc_body)
   return hex_body
 
+def decrypt_syncTime(syncTime):
+  syncTime = b"".join(dec_cipher.decrypt_ecb(bytearray.fromhex(syncTime)))
+  syncTime = int(syncTime[4:-2])
+  return syncTime
+
 def checkLicensing():
   method = 'test.checkLicensing'
   url = nonhttps+resource+parameter+method
@@ -44,8 +49,7 @@ def partnerAuth():
 
   resp = r.json()['result']
   syncTimeEnc = resp['syncTime']
-  syncTime = b"".join(dec_cipher.decrypt_ecb(bytearray.fromhex(syncTimeEnc)))
-  syncTime = int(syncTime[4:-2])
+  syncTime = decrypt_syncTime(syncTimeEnc)
 
   partnerToken = resp['partnerAuthToken']
 
@@ -71,11 +75,49 @@ def userLogin(syncDiff, partnerToken, partnerId, username, password):
   }
   enc_json = encrypt(json.dumps(body))
   r = requests.post(url,data=enc_json)
-  print(r.json())
+  #print(r.text)
+  try:
+    resp = r.json()['result']
+  except Exception:
+    print(r.text)
+
+  userToken = resp['userAuthToken']
+  userId = resp['userId']
+
+  stations = resp['stationListResult']['stations']
+
+  return userToken,userId,stations
+
+def getPlaylist(syncDiff,userToken,userId,partnerToken,partnerId,stationToken):
+  body = {
+    "stationToken":stationToken,
+    "userAuthToken":userToken,
+    "syncTime":int(time())+syncDiff
+  }
+
+  method = 'station.getPlaylist'
+  partnerIdParam = '&partner_id='+partnerId
+  userIdParam = '&user_id='+userId
+  authTokenParam = '&auth_token='+partnerToken
+  url = endpoint+resource+parameter+method+partnerIdParam+userIdParam+authTokenParam
+  print(url)
+  print(body)
+  headers = {
+    'Content-Type':'text/plain'
+  }
+  enc_json = encrypt(json.dumps(body))
+  r = requests.post(url,data=enc_json)
+  print(r.text)
+
 
 #checkLicensing()
 username = input('Username: ')
 password = getpass.getpass('Password: ')
 syncDiff,partnerToken,partnerId = partnerAuth()
-userLogin(syncDiff,partnerToken,partnerId,username,password)
+userToken,userId,stations = userLogin(syncDiff,partnerToken,partnerId,username,password)
+for i in range(len(stations)):
+  print("{0} - {1}".format(i,stations[i]['stationName']))
 
+print
+station_num = int(input('Choose a station number to play: '))
+getPlaylist(syncDiff,userToken,userId,partnerToken,partnerId,stations[station_num]['stationToken'])
